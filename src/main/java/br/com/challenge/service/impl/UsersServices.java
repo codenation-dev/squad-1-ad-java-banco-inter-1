@@ -108,7 +108,6 @@ public class UsersServices implements UsersServiceInterface {
         if (users != null) {
             users.setActive(true);
             updateUsers(users);
-
             return "Usuário Registrado com sucesso!";
         }
         return "Erro ao ativar o usuário.";
