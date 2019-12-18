@@ -1,6 +1,7 @@
 package br.com.challenge.service.impl;
 
 import br.com.challenge.entity.Users;
+import br.com.challenge.exception.UsersDisabledException;
 import br.com.challenge.repository.UsersRepository;
 import br.com.challenge.security.UserSS;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,12 +17,15 @@ public class UserDetailsServiceImpl implements UserDetailsService {
     UsersRepository usersRepository;
 
     @Override
-    public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        Users user = usersRepository.findByEmail(email);
+    public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException, UsersDisabledException {
 
+        Users user = usersRepository.findByEmail(email);
         if (user == null) {
             throw new UsernameNotFoundException(email);
         }
+
+        if (!user.isActive())
+            throw new UsersDisabledException();
 
         return new UserSS(user.getId(), user.getEmail(), user.getPassword(), user.getProfiles());
     }

@@ -2,6 +2,7 @@ package br.com.challenge.security;
 
 
 import br.com.challenge.dto.CredentialsDTO;
+import br.com.challenge.exception.UsersDisabledException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -25,38 +26,37 @@ public class JWTAuthenticationFilter extends UsernamePasswordAuthenticationFilte
     private JWTUtil jwtUtil;
 
     public JWTAuthenticationFilter(AuthenticationManager authenticationManager, JWTUtil jwtUtil) {
+
         setAuthenticationFailureHandler(new JWTAuthenticationFailureHandler());
         this.authenticationManager = authenticationManager;
         this.jwtUtil = jwtUtil;
     }
 
-
     @Override
-    public Authentication attemptAuthentication(HttpServletRequest req,
-                                                HttpServletResponse res) throws AuthenticationException {
+    public Authentication attemptAuthentication(HttpServletRequest req, HttpServletResponse res)
+            throws AuthenticationException {
 
         try {
-            CredentialsDTO credentials = new ObjectMapper()
-                    .readValue(req.getInputStream(), CredentialsDTO.class);
+
+            CredentialsDTO credentials = new ObjectMapper().readValue(req.getInputStream(), CredentialsDTO.class);
 
             UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(credentials.getEmail(), credentials.getPassword(), new ArrayList<>());
 
             Authentication auth = authenticationManager.authenticate(authToken);
             return auth;
-        } catch (IOException e) {
+        }
+        catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
     @Override
-    protected void successfulAuthentication(HttpServletRequest req,
-                                            HttpServletResponse res,
-                                            FilterChain chain,
-                                            Authentication auth) throws IOException, ServletException {
+    protected void successfulAuthentication(HttpServletRequest request, HttpServletResponse response, FilterChain chain, Authentication auth)
+            throws IOException, ServletException {
 
         String username = ((UserSS) auth.getPrincipal()).getUsername();
         String token = jwtUtil.generateToken(username);
-        res.addHeader("Authorization", "Bearer " + token);
+        response.addHeader("Authorization", "Bearer " + token);
     }
 
     private class JWTAuthenticationFailureHandler implements AuthenticationFailureHandler {
@@ -64,18 +64,31 @@ public class JWTAuthenticationFilter extends UsernamePasswordAuthenticationFilte
         @Override
         public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response, AuthenticationException exception)
                 throws IOException, ServletException {
-            response.setStatus(401);
+
             response.setContentType("application/json");
-            response.getWriter().append(json());
+            if (exception != null && exception.getCause() != null && exception.getCause().toString().equals(UsersDisabledException.class.getName())) {
+
+                response.setStatus(403);
+                response.getWriter().append(getJsonResponse("403", "Não autorizado", "Confirmação de e-mail pendente"));
+            }
+            else {
+
+                response.setStatus(401);
+                response.getWriter().append(getJsonResponse("401", "Não autorizado", "Email ou senha inválidos"));
+            }
         }
 
-        private String json() {
-            long date = new Date().getTime();
-            return "{\"timestamp\": " + date + ", "
-                    + "\"status\": 401, "
-                    + "\"error\": \"Não autorizado\", "
-                    + "\"message\": \"Email ou senha inválidos\", "
-                    + "\"path\": \"/login\"}";
+        private String getJsonResponse(String statusCode, String error, String message) {
+
+            Long date = new Date().getTime();
+
+            return "{"
+                    .concat("\"timestamp\": ").concat(date.toString()).concat(", ")
+                    .concat("\"status\": ").concat(statusCode).concat(", ")
+                    .concat("\"error\": \"").concat(error).concat("\", ")
+                    .concat("\"message\": \"").concat(message).concat("\", ")
+                    .concat("\"path\": \"/login\"")
+                    .concat("}");
         }
     }
 }
