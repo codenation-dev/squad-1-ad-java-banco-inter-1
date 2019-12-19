@@ -1,11 +1,10 @@
 package br.com.challenge.service.impl;
 
-import static org.springframework.data.domain.ExampleMatcher.GenericPropertyMatchers.contains;
-import static org.springframework.data.domain.ExampleMatcher.GenericPropertyMatchers.exact;
-
+import br.com.challenge.dto.LogErrorCountDTO;
 import br.com.challenge.dto.LogErrorDTO;
 import br.com.challenge.entity.LogError;
 import br.com.challenge.entity.Users;
+import br.com.challenge.enums.Environment;
 import br.com.challenge.repository.LogErrorRepository;
 import br.com.challenge.repository.UsersRepository;
 import br.com.challenge.service.interfaces.LogErrorServiceInterface;
@@ -18,6 +17,8 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import javax.persistence.Tuple;
+import java.util.List;
 
 @Service
 public class LogErrorService implements LogErrorServiceInterface {
@@ -28,30 +29,49 @@ public class LogErrorService implements LogErrorServiceInterface {
     @Autowired
     UsersRepository usersRepository;
 
-    @Override
-    public LogError getLogError(Long id) {
 
-        return logErrorRepository.findById(id).orElse(null);
+    private Long getAuthenticadedUserId(){
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        UserDetails userDetails = (UserDetails)authentication.getPrincipal();
+        return usersRepository.findByEmail(userDetails.getUsername()).getId();
     }
 
     @Override
-    public Page<LogError> getLogErrors(Pageable pageable) {
+    public LogError getLogError(Long id) {
 
-        return logErrorRepository.findAll(pageable);
+        return logErrorRepository.findByIdUsersId(id, getAuthenticadedUserId());
     }
 
     @Override
     public Page<LogError> getLogErrors(String genericFilter, Pageable pageable) {
 
         genericFilter = genericFilter.trim();
+        if (genericFilter.isEmpty()){
+            return logErrorRepository.findAllNonFiledUserLogError(getAuthenticadedUserId(), false, pageable);
+        }
+        else {
+            return logErrorRepository.findAllNonFiledUserLogErrorWithGenericFilter(getAuthenticadedUserId(), false, genericFilter, pageable);
+        }
+    }
 
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        UserDetails userDetails = (UserDetails)authentication.getPrincipal();
-        Users authenticatedUser = usersRepository.findByEmail(userDetails.getUsername());
+    @Override
+    public Page<LogError> getLogErrorsByEnvironment(String environmentDescription, Pageable pageable) {
 
-        Long userId = authenticatedUser.getId();
+        if (environmentDescription == null || environmentDescription.isEmpty()) {
+            throw new IllegalArgumentException("Descrição inválida");
+        }
 
-        return logErrorRepository.findAllNonFiledUserLogErrorWithGenericFilter(userId, false, genericFilter, pageable);
+        int environment = Environment.toEnum(environmentDescription).getCod();
+
+        return logErrorRepository.findByUsersIdEnvironment(getAuthenticadedUserId(), environment, pageable);
+    }
+
+    @Override
+    public List<LogErrorCountDTO> getEnvironmentCountLogError(){
+
+        List<Tuple> tupleList = logErrorRepository.getEnvironmentCountLogError(getAuthenticadedUserId());
+        return LogErrorCountDTO.buildList(tupleList);
     }
 
     @Override
